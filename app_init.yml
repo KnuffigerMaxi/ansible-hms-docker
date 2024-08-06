@@ -1,0 +1,68 @@
+- hosts: test
+  become: yes
+  gather_facts: yes
+  vars:
+    regex: '[^A-Za-z0-9._-]'
+    replace: '_'
+    arr_apikey: '(?<=\<ApiKey\>)\w*(?=\<\/ApiKey\>)'
+
+
+
+  tasks:
+    - name: load vars
+      ansible.builtin.include_vars:
+        dir: "./roles/hmsdocker/vars"
+
+    - name: import tasks
+      ansible.builtin.import_tasks:
+        file: "./roles/hmsdocker/tasks/app_api_key_reader.yml"
+
+    - name: Init Radarr
+      when: hmsdocker_container_enabled_radarr
+      block:
+        - name: Get radarr container info
+          ansible.builtin.docker_container_info:
+            name: radarr
+          register: radarr_container_info
+
+        - name: Get current root folders
+          ansible.builtin.uri:
+            url: "https://{{ hms_docker_container_map['radarr']['proxy_host_rule'] }}.{{ hms_docker_domain }}/api/v3/rootfolder"
+            method: GET
+            status_code: 200
+            body_format: json
+            return_content: true
+            headers:
+              X-Api-Key: "{{ slurped_api_key_radarr['content'] | b64decode | regex_search(arr_apikey) }}"
+          register: radarr_root_folders
+
+        - name: test
+          ansible.builtin.debug:
+            msg: "{{ radarr_container_info.container.Mounts }}"
+
+        - name: Set current folder variable
+          ansible.builtin.set_fact:
+            radarr_accessible_root_folders: "{{ radarr_root_folders.json | json_query('[?accessible==`true`].path') }}"
+            radarr_mount_list: "{{ radarr_container_info.container.Mounts | selectattr('Source', 'equalto', hms_docker_mount_path) | map(attribute='Destination') | list }}"
+            hmsd_movie_folders: "{{ hms_docker_library_folders | selectattr('type', 'equalto', 'movies') | map(attribute='folder_name') | list }}"
+
+        - name: Ensure root folder
+          ansible.builtin.uri:
+            url: "https://{{ hms_docker_container_map['radarr']['proxy_host_rule'] }}.{{ hms_docker_domain }}/api/v3/rootfolder"
+            method: POST
+            status_code:
+              - 201
+            body_format: json
+            return_content: true
+            body:
+              path: "{{ dir[0] }}/{{ hms_docker_library_folder_name }}/{{ dir[1] }}"
+            headers:
+              X-Api-Key: "{{ slurped_api_key_radarr['content'] | b64decode | regex_search(arr_apikey) }}"
+          when: (dir[0] + '/' + hms_docker_library_folder_name + '/' + dir[1]) not in radarr_accessible_root_folders
+          with_nested:
+            - "{{ radarr_mount_list }}"
+            - "{{ hmsd_movie_folders }}"
+          loop_control:
+            loop_var: dir
+          register: radarr_root_added
+          ignore_errors: true
