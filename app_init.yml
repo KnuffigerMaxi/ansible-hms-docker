@@ -17,6 +17,346 @@
       ansible.builtin.import_tasks:
         file: "./roles/hmsdocker/tasks/app_api_key_reader.yml"
 
+    - name: Init Prowlarr
+      when: hmsdocker_container_enabled_prowlarr
+      block:
+        - name: Precheck Prowlarr API Key
+          ansible.builtin.uri:
+            url: "https://{{ hms_docker_container_map['prowlarr']['proxy_host_rule'] }}.{{ hms_docker_domain }}/api"
+            method: GET
+            status_code: 200
+            body_format: json
+            return_content: true
+            headers:
+              X-Api-Key: "{{ slurped_api_key_prowlarr['content'] | b64decode | regex_search(arr_apikey) }}"
+          register: prowlarr_api_key_precheck
+
+        - name: Get Prowlarr Tags
+          ansible.builtin.uri:
+            url: "https://{{ hms_docker_container_map['prowlarr']['proxy_host_rule'] }}.{{ hms_docker_domain }}/api/v1/tag"
+            method: GET
+            status_code: 200
+            body_format: json
+            return_content: true
+            headers:
+              X-Api-Key: "{{ slurped_api_key_prowlarr['content'] | b64decode | regex_search(arr_apikey) }}"
+          register: prowlarr_tags
+
+        - name: Set Prowlarr Tag Facts
+          ansible.builtin.set_fact:
+            prowlarr_tag_list: "{{ prowlarr_tags.json | json_query('[].label') }}"
+            prowlarr_flaresolverr_tag: hmsd_flaresolverr
+            prowlarr_transmission_tag: hmsd_transmission
+
+        - name: Create Prowlarr Tags if not exist
+          when: item not in prowlarr_tag_list
+          ansible.builtin.uri:
+            url: "https://{{ hms_docker_container_map['prowlarr']['proxy_host_rule'] }}.{{ hms_docker_domain }}/api/v1/tag"
+            method: POST
+            body:
+              label: "{{ item }}"
+            status_code: 201
+            body_format: json
+            return_content: true
+            headers:
+              X-Api-Key: "{{ slurped_api_key_prowlarr['content'] | b64decode | regex_search(arr_apikey) }}"
+          loop:
+            - "{{ prowlarr_transmission_tag }}"
+            - "{{ prowlarr_flaresolverr_tag }}"
+          register: prowlarr_req_add_tags
+          changed_when: prowlarr_req_add_tags.status == 201
+
+        - name: Get Prowlarr Tags
+          ansible.builtin.uri:
+            url: "https://{{ hms_docker_container_map['prowlarr']['proxy_host_rule'] }}.{{ hms_docker_domain }}/api/v1/tag"
+            method: GET
+            status_code: 200
+            body_format: json
+            return_content: true
+            headers:
+              X-Api-Key: "{{ slurped_api_key_prowlarr['content'] | b64decode | regex_search(arr_apikey) }}"
+          register: prowlarr_tags
+
+        - name: Set Prowlarr Tag Facts
+          ansible.builtin.set_fact:
+            prowlarr_flaresolverr_tag_id: "{{ prowlarr_tags.json | json_query(flaresolverr_query) }}"
+            prowlarr_transmission_tag_id: "{{ prowlarr_tags.json | json_query(transmission_query) }}"
+          vars:
+            flaresolverr_query: "[?label=='{{ prowlarr_flaresolverr_tag }}'].id"
+            transmission_query: "[?label=='{{ prowlarr_transmission_tag }}'].id"
+
+        - name: Get Prowlarr configured apps
+          ansible.builtin.uri:
+            url: "https://{{ hms_docker_container_map['prowlarr']['proxy_host_rule'] }}.{{ hms_docker_domain }}/api/v1/applications"
+            method: GET
+            status_code: 200
+            body_format: json
+            return_content: true
+            headers:
+              X-Api-Key: "{{ slurped_api_key_prowlarr['content'] | b64decode | regex_search(arr_apikey) }}"
+          register: prowlarr_apps
+
+        - name: Set Prowlarr App Facts
+          ansible.builtin.set_fact:
+            prowlarr_sonarr_apps: "{{ prowlarr_apps.json | json_query('[?implementation==`Sonarr`].name') }}"
+            prowlarr_radarr_apps: "{{ prowlarr_apps.json | json_query('[?implementation==`Radarr`].name') }}"
+            prowlarr_sonarr_app_name: "HMSD - Sonarr"
+            prowlarr_sonarr_4k_app_name: "HMSD - Sonarr - {{ separate_4k_instances_suffix }}"
+            prowlarr_radarr_app_name: "HMSD - Radarr"
+            prowlarr_radarr_4k_app_name: "HMSD - Radarr - {{ separate_4k_instances_suffix }}"
+
+        - name: Configure Sonarr apps in Prowlarr
+          when: hmsdocker_container_enabled_sonarr
+          block:
+            - name: Ensure Prowlarr Sonarr app
+              when: prowlarr_sonarr_app_name not in prowlarr_sonarr_apps
+              ansible.builtin.uri:
+                url: "https://{{ hms_docker_container_map['prowlarr']['proxy_host_rule'] }}.{{ hms_docker_domain }}/api/v1/applications"
+                method: POST
+                body: {
+                  name: "{{ prowlarr_sonarr_app_name }}",
+                  implementation: "Sonarr",
+                  configContract: "SonarrSettings",
+                  syncLevel: "fullSync",
+                  fields: [
+                    {
+                      name: "prowlarrUrl",
+                      value: "http://prowlarr:9696"
+                    },
+                    {
+                      name: "baseUrl",
+                      value: "http://sonarr:8989"
+                    },
+                    {
+                      name: "apiKey",
+                      value: "{{ slurped_api_key_sonarr['content'] | b64decode | regex_search(arr_apikey) }}"
+                    }
+                  ],
+                  
+                }
+                status_code: 201
+                body_format: json
+                return_content: true
+                headers:
+                  X-Api-Key: "{{ slurped_api_key_prowlarr['content'] | b64decode | regex_search(arr_apikey) }}"
+              register: prowlarr_req_add_sonarr
+              changed_when: prowlarr_req_add_sonarr.status == 201
+
+            - name: Ensure Prowlarr Sonarr 4K app
+              when: prowlarr_sonarr_4k_app_name not in prowlarr_sonarr_apps and separate_4k_instances_enable
+              ansible.builtin.uri:
+                url: "https://{{ hms_docker_container_map['prowlarr']['proxy_host_rule'] }}.{{ hms_docker_domain }}/api/v1/applications"
+                method: POST
+                body: {
+                  name: "{{ prowlarr_sonarr_4k_app_name }}",
+                  implementation: "Sonarr",
+                  configContract: "SonarrSettings",
+                  syncLevel: "fullSync",
+                  fields: [
+                    {
+                      name: "prowlarrUrl",
+                      value: "http://prowlarr:9696"
+                    },
+                    {
+                      name: "baseUrl",
+                      value: "http://sonarr-4k:8989"
+                    },
+                    {
+                      name: "apiKey",
+                      value: "{{ slurped_api_key_sonarr_4k['content'] | b64decode | regex_search(arr_apikey) }}"
+                    }
+                  ],
+                  
+                }
+                status_code: 201
+                body_format: json
+                return_content: true
+                headers:
+                  X-Api-Key: "{{ slurped_api_key_prowlarr['content'] | b64decode | regex_search(arr_apikey) }}"
+              register: prowlarr_req_add_sonarr_4k
+              changed_when: prowlarr_req_add_sonarr_4k.status == 201
+
+        - name: Configure Radarr apps in Prowlarr
+          when: hmsdocker_container_enabled_radarr
+          block:
+            - name: Ensure Prowlarr Radarr app
+              when: prowlarr_radarr_app_name not in prowlarr_radarr_apps
+              ansible.builtin.uri:
+                url: "https://{{ hms_docker_container_map['prowlarr']['proxy_host_rule'] }}.{{ hms_docker_domain }}/api/v1/applications"
+                method: POST
+                body: {
+                  name: "{{ prowlarr_radarr_app_name }}",
+                  implementation: "Radarr",
+                  configContract: "RadarrSettings",
+                  syncLevel: "fullSync",
+                  fields: [
+                    {
+                      name: "prowlarrUrl",
+                      value: "http://prowlarr:9696"
+                    },
+                    {
+                      name: "baseUrl",
+                      value: "http://radarr:7878"
+                    },
+                    {
+                      name: "apiKey",
+                      value: "{{ slurped_api_key_radarr['content'] | b64decode | regex_search(arr_apikey) }}"
+                    }
+                  ],
+                  
+                }
+                status_code: 201
+                body_format: json
+                return_content: true
+                headers:
+                  X-Api-Key: "{{ slurped_api_key_prowlarr['content'] | b64decode | regex_search(arr_apikey) }}"
+              register: prowlarr_req_add_radarr
+              changed_when: prowlarr_req_add_radarr.status == 201
+
+            - name: Ensure Prowlarr Radarr 4K app
+              when: prowlarr_radarr_4k_app_name not in prowlarr_radarr_apps and separate_4k_instances_enable
+              ansible.builtin.uri:
+                url: "https://{{ hms_docker_container_map['prowlarr']['proxy_host_rule'] }}.{{ hms_docker_domain }}/api/v1/applications"
+                method: POST
+                body: {
+                  name: "{{ prowlarr_radarr_4k_app_name }}",
+                  implementation: "Radarr",
+                  configContract: "RadarrSettings",
+                  syncLevel: "fullSync",
+                  fields: [
+                    {
+                      name: "prowlarrUrl",
+                      value: "http://prowlarr:9696"
+                    },
+                    {
+                      name: "baseUrl",
+                      value: "http://radarr-4k:7878"
+                    },
+                    {
+                      name: "apiKey",
+                      value: "{{ slurped_api_key_radarr_4k['content'] | b64decode | regex_search(arr_apikey) }}"
+                    }
+                  ],
+                  
+                }
+                status_code: 201
+                body_format: json
+                return_content: true
+                headers:
+                  X-Api-Key: "{{ slurped_api_key_prowlarr['content'] | b64decode | regex_search(arr_apikey) }}"
+              register: prowlarr_req_add_radarr_4k
+              changed_when: prowlarr_req_add_radarr_4k.status == 201
+
+        - name: Get Indexer Proxies in Prowlarr
+          ansible.builtin.uri:
+            url: "https://{{ hms_docker_container_map['prowlarr']['proxy_host_rule'] }}.{{ hms_docker_domain }}/api/v1/indexerproxy"
+            method: GET
+            status_code: 200
+            body_format: json
+            return_content: true
+            headers:
+              X-Api-Key: "{{ slurped_api_key_prowlarr['content'] | b64decode | regex_search(arr_apikey) }}"
+          register: prowlarr_idx_proxies
+
+        - name: Set Prowlarr Proxy Facts
+          ansible.builtin.set_fact:
+            prowlarr_idx_proxies_http: "{{ prowlarr_idx_proxies.json | json_query('[?implementation==`Http`].name') }}"
+            prowlarr_idx_proxies_flaresolverr: "{{ prowlarr_idx_proxies.json | json_query('[?implementation==`FlareSolverr`].name') }}"
+            prowlarr_flaresolverr_name: "HMSD - FlareSolverr"
+            prowlarr_http_proxy_name: "HMSD - Transmission"
+
+        - name: Configure HTTP indexer proxy in Prowlarr
+          when: prowlarr_http_proxy_name not in prowlarr_idx_proxies_http and hmsdocker_container_enabled_transmission
+          ansible.builtin.uri:
+            url: "https://{{ hms_docker_container_map['prowlarr']['proxy_host_rule'] }}.{{ hms_docker_domain }}/api/v1/indexerproxy"
+            method: POST
+            body: {
+              name: "{{ prowlarr_http_proxy_name }}",
+              implementation: "Http",
+              configContract: "HttpSettings",
+              fields: [
+                {
+                  name: "host",
+                  value: "transmission"
+                },
+                {
+                  name: "port",
+                  value: "8888"
+                }
+              ],
+              tags: "{{ prowlarr_transmission_tag_id }}"
+            }
+            status_code: 201
+            body_format: json
+            return_content: true
+            headers:
+              X-Api-Key: "{{ slurped_api_key_prowlarr['content'] | b64decode | regex_search(arr_apikey) }}"
+          register: prowlarr_req_add_transmission
+          changed_when: prowlarr_req_add_transmission.status == 201
+
+        - name: Configure FlareSolverr indexer proxy in Prowlarr
+          when: prowlarr_flaresolverr_name not in prowlarr_idx_proxies_flaresolverr and hmsdocker_container_enabled_flaresolverr
+          ansible.builtin.uri:
+            url: "https://{{ hms_docker_container_map['prowlarr']['proxy_host_rule'] }}.{{ hms_docker_domain }}/api/v1/indexerproxy"
+            method: POST
+            body: {
+              name: "{{ prowlarr_flaresolverr_name }}",
+              implementation: "FlareSolverr",
+              configContract: "FlareSolverrSettings",
+              fields: [
+                {
+                  name: "host",
+                  value: "http://flaresolverr:8191/"
+                }
+              ],
+              tags: "{{ prowlarr_flaresolverr_tag_id }}"
+            }
+            status_code: 201
+            body_format: json
+            return_content: true
+            headers:
+              X-Api-Key: "{{ slurped_api_key_prowlarr['content'] | b64decode | regex_search(arr_apikey) }}"
+          register: prowlarr_req_add_flaresolverr
+          changed_when: prowlarr_req_add_flaresolverr.status == 201
+
+        - name: Configure General proxy in Prowlarr
+          block:
+            - name: Get current system proxy status
+              ansible.builtin.uri:
+                url: "https://{{ hms_docker_container_map['prowlarr']['proxy_host_rule'] }}.{{ hms_docker_domain }}/api/v1/config/host"
+                method: GET
+                status_code: 200
+                body_format: json
+                return_content: true
+                headers:
+                  X-Api-Key: "{{ slurped_api_key_prowlarr['content'] | b64decode | regex_search(arr_apikey) }}"
+              register: prowlarr_system_conf
+
+            - name: Set Prowlarr config facts
+              ansible.builtin.set_fact:
+                prowlarr_id: "{{ prowlarr_system_conf.json['id'] }}"
+                proxy_enabled: "{{ prowlarr_system_conf.json['proxyEnabled'] }}"
+                prowlarr_system_conf_updated: "{{ prowlarr_system_conf.json | combine({
+                  'proxyEnabled': true,
+                  'proxyHostname': 'transmission',
+                  'proxyPort': 8888,
+                  'proxyType': 'http'
+                }) }}"
+
+            - name: Configure Prowlarr HTTP Proxy
+              when: not proxy_enabled
+              ansible.builtin.uri:
+                url: "https://{{ hms_docker_container_map['prowlarr']['proxy_host_rule'] }}.{{ hms_docker_domain }}/api/v1/config/host/{{ prowlarr_id }}"
+                method: PUT
+                body: "{{ prowlarr_system_conf_updated }}"
+                status_code: 202
+                body_format: json
+                return_content: true
+                headers:
+                  X-Api-Key: "{{ slurped_api_key_prowlarr['content'] | b64decode | regex_search(arr_apikey) }}"
+              register: prowlarr_req_add_system_proxy
+              changed_when: prowlarr_req_add_system_proxy.status == 202
+
     - name: Init Radarr
       when: hmsdocker_container_enabled_radarr
       block:
