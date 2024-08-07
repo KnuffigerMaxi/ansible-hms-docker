@@ -52,3 +52,11 @@ jobs:
           hms-docker.yml
           --diff
           --extra-vars "@.github/extra-vars.yml"
+
+      - name: Run playbook again to ensure API keys are retrieved
+        run: >-
+          sudo ansible-playbook
+          -i inventory/hosts.yml
+          app-init.yml
+          --diff
+          --extra-vars "@.github/extra-vars.yml"
