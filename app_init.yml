@@ -22,7 +22,7 @@
       block:
         - name: Precheck Prowlarr API Key
           ansible.builtin.uri:
-            url: "https://{{ hms_docker_container_map['prowlarr']['proxy_host_rule'] }}.{{ hms_docker_domain }}/api"
+            url: "https://{{ hms_docker_container_map['prowlarr']['proxy_host_rule'] }}.{{ hms_docker_domain }}:9696/api"
             method: GET
             status_code: 200
             body_format: json
@@ -33,7 +33,7 @@
 
         - name: Get Prowlarr Tags
           ansible.builtin.uri:
-            url: "https://{{ hms_docker_container_map['prowlarr']['proxy_host_rule'] }}.{{ hms_docker_domain }}/api/v1/tag"
+            url: "https://{{ hms_docker_container_map['prowlarr']['proxy_host_rule'] }}.{{ hms_docker_domain }}:9696/api/v1/tag"
             method: GET
             status_code: 200
             body_format: json
