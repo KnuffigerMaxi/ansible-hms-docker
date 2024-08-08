@@ -1,4 +1,4 @@
-- hosts: all
+- hosts: test
   become: yes
   gather_facts: yes
   vars:
@@ -20,9 +20,19 @@
     - name: Init Prowlarr
       when: hmsdocker_container_enabled_prowlarr
       block:
+        - name: Set Prowlarr facts
+          ansible.builtin.set_fact:
+            prowlarr_url: "http{{ 's' if traefik_ssl_enabled and not hmsdocker_expose_ports_enabled_prowlarr }}://{{ hms_docker_container_map['prowlarr']['proxy_host_rule'] }}.{{ hms_docker_domain }}{{ ':9696' if hmsdocker_expose_ports_enabled_prowlarr }}/api"
+            prowlarr_sonarr_app_name: "HMSD - Sonarr"
+            prowlarr_sonarr_4k_app_name: "HMSD - Sonarr - {{ separate_4k_instances_suffix }}"
+            prowlarr_radarr_app_name: "HMSD - Radarr"
+            prowlarr_radarr_4k_app_name: "HMSD - Radarr - {{ separate_4k_instances_suffix }}"
+            prowlarr_flaresolverr_name: "HMSD - FlareSolverr"
+            prowlarr_http_proxy_name: "HMSD - Transmission"
+
         - name: Precheck Prowlarr API Key
           ansible.builtin.uri:
-            url: "http{{ 's' if traefik_ssl_enabled }}://{{ hms_docker_container_map['prowlarr']['proxy_host_rule'] }}.{{ hms_docker_domain }}{{ ':9696' if hmsdocker_expose_ports_enabled_prowlarr }}/api"
+            url: "{{ prowlarr_url }}"
             method: GET
             status_code: 200
             body_format: json
@@ -33,7 +43,7 @@
 
         - name: Get Prowlarr Tags
           ansible.builtin.uri:
-            url: "http{{ 's' if traefik_ssl_enabled }}://{{ hms_docker_container_map['prowlarr']['proxy_host_rule'] }}.{{ hms_docker_domain }}{{ ':9696' if hmsdocker_expose_ports_enabled_prowlarr }}/api/v1/tag"
+            url: "{{ prowlarr_url }}/v1/tag"
             method: GET
             status_code: 200
             body_format: json
@@ -51,7 +61,7 @@
         - name: Create Prowlarr Tags if not exist
           when: item not in prowlarr_tag_list
           ansible.builtin.uri:
-            url: "http{{ 's' if traefik_ssl_enabled }}://{{ hms_docker_container_map['prowlarr']['proxy_host_rule'] }}.{{ hms_docker_domain }}/api/v1/tag"
+            url: "{{ prowlarr_url }}/v1/tag"
             method: POST
             body:
               label: "{{ item }}"
@@ -68,7 +78,7 @@
 
         - name: Get Prowlarr Tags after creation
           ansible.builtin.uri:
-            url: "http{{ 's' if traefik_ssl_enabled }}://{{ hms_docker_container_map['prowlarr']['proxy_host_rule'] }}.{{ hms_docker_domain }}/api/v1/tag"
+            url: "{{ prowlarr_url }}/v1/tag"
             method: GET
             status_code: 200
             body_format: json
@@ -87,7 +97,7 @@
 
         - name: Get Prowlarr configured apps
           ansible.builtin.uri:
-            url: "http{{ 's' if traefik_ssl_enabled }}://{{ hms_docker_container_map['prowlarr']['proxy_host_rule'] }}.{{ hms_docker_domain }}/api/v1/applications"
+            url: "{{ prowlarr_url }}/v1/applications"
             method: GET
             status_code: 200
             body_format: json
@@ -100,10 +110,6 @@
           ansible.builtin.set_fact:
             prowlarr_sonarr_apps: "{{ prowlarr_apps.json | json_query('[?implementation==`Sonarr`].name') }}"
             prowlarr_radarr_apps: "{{ prowlarr_apps.json | json_query('[?implementation==`Radarr`].name') }}"
-            prowlarr_sonarr_app_name: "HMSD - Sonarr"
-            prowlarr_sonarr_4k_app_name: "HMSD - Sonarr - {{ separate_4k_instances_suffix }}"
-            prowlarr_radarr_app_name: "HMSD - Radarr"
-            prowlarr_radarr_4k_app_name: "HMSD - Radarr - {{ separate_4k_instances_suffix }}"
 
         - name: Configure Sonarr apps in Prowlarr
           when: hmsdocker_container_enabled_sonarr
@@ -111,7 +117,7 @@
             - name: Ensure Prowlarr Sonarr app
               when: prowlarr_sonarr_app_name not in prowlarr_sonarr_apps
               ansible.builtin.uri:
-                url: "http{{ 's' if traefik_ssl_enabled }}://{{ hms_docker_container_map['prowlarr']['proxy_host_rule'] }}.{{ hms_docker_domain }}/api/v1/applications"
+                url: "{{ prowlarr_url }}/v1/applications"
                 method: POST
                 body: {
                   name: "{{ prowlarr_sonarr_app_name }}",
@@ -145,7 +151,7 @@
             - name: Ensure Prowlarr Sonarr 4K app
               when: prowlarr_sonarr_4k_app_name not in prowlarr_sonarr_apps and separate_4k_instances_enable
               ansible.builtin.uri:
-                url: "http{{ 's' if traefik_ssl_enabled }}://{{ hms_docker_container_map['prowlarr']['proxy_host_rule'] }}.{{ hms_docker_domain }}/api/v1/applications"
+                url: "{{ prowlarr_url }}/v1/applications"
                 method: POST
                 body: {
                   name: "{{ prowlarr_sonarr_4k_app_name }}",
@@ -182,7 +188,7 @@
             - name: Ensure Prowlarr Radarr app
               when: prowlarr_radarr_app_name not in prowlarr_radarr_apps
               ansible.builtin.uri:
-                url: "http{{ 's' if traefik_ssl_enabled }}://{{ hms_docker_container_map['prowlarr']['proxy_host_rule'] }}.{{ hms_docker_domain }}/api/v1/applications"
+                url: "{{ prowlarr_url }}/v1/applications"
                 method: POST
                 body: {
                   name: "{{ prowlarr_radarr_app_name }}",
@@ -216,7 +222,7 @@
             - name: Ensure Prowlarr Radarr 4K app
               when: prowlarr_radarr_4k_app_name not in prowlarr_radarr_apps and separate_4k_instances_enable
               ansible.builtin.uri:
-                url: "http{{ 's' if traefik_ssl_enabled }}://{{ hms_docker_container_map['prowlarr']['proxy_host_rule'] }}.{{ hms_docker_domain }}/api/v1/applications"
+                url: "{{ prowlarr_url }}/v1/applications"
                 method: POST
                 body: {
                   name: "{{ prowlarr_radarr_4k_app_name }}",
@@ -249,7 +255,7 @@
 
         - name: Get Indexer Proxies in Prowlarr
           ansible.builtin.uri:
-            url: "http{{ 's' if traefik_ssl_enabled }}://{{ hms_docker_container_map['prowlarr']['proxy_host_rule'] }}.{{ hms_docker_domain }}/api/v1/indexerproxy"
+            url: "{{ prowlarr_url }}/v1/indexerproxy"
             method: GET
             status_code: 200
             body_format: json
@@ -262,13 +268,12 @@
           ansible.builtin.set_fact:
             prowlarr_idx_proxies_http: "{{ prowlarr_idx_proxies.json | json_query('[?implementation==`Http`].name') }}"
             prowlarr_idx_proxies_flaresolverr: "{{ prowlarr_idx_proxies.json | json_query('[?implementation==`FlareSolverr`].name') }}"
-            prowlarr_flaresolverr_name: "HMSD - FlareSolverr"
-            prowlarr_http_proxy_name: "HMSD - Transmission"
+            
 
         - name: Configure HTTP indexer proxy in Prowlarr
           when: prowlarr_http_proxy_name not in prowlarr_idx_proxies_http and hmsdocker_container_enabled_transmission
           ansible.builtin.uri:
-            url: "http{{ 's' if traefik_ssl_enabled }}://{{ hms_docker_container_map['prowlarr']['proxy_host_rule'] }}.{{ hms_docker_domain }}/api/v1/indexerproxy"
+            url: "{{ prowlarr_url }}/v1/indexerproxy"
             method: POST
             body: {
               name: "{{ prowlarr_http_proxy_name }}",
@@ -297,7 +302,7 @@
         - name: Configure FlareSolverr indexer proxy in Prowlarr
           when: prowlarr_flaresolverr_name not in prowlarr_idx_proxies_flaresolverr and hmsdocker_container_enabled_flaresolverr
           ansible.builtin.uri:
-            url: "http{{ 's' if traefik_ssl_enabled }}://{{ hms_docker_container_map['prowlarr']['proxy_host_rule'] }}.{{ hms_docker_domain }}/api/v1/indexerproxy"
+            url: "{{ prowlarr_url }}/v1/indexerproxy"
             method: POST
             body: {
               name: "{{ prowlarr_flaresolverr_name }}",
@@ -323,7 +328,7 @@
           block:
             - name: Get current system proxy status
               ansible.builtin.uri:
-                url: "http{{ 's' if traefik_ssl_enabled }}://{{ hms_docker_container_map['prowlarr']['proxy_host_rule'] }}.{{ hms_docker_domain }}/api/v1/config/host"
+                url: "{{ prowlarr_url }}/v1/config/host"
                 method: GET
                 status_code: 200
                 body_format: json
@@ -346,7 +351,7 @@
             - name: Configure Prowlarr HTTP Proxy
               when: not proxy_enabled
               ansible.builtin.uri:
-                url: "http{{ 's' if traefik_ssl_enabled }}://{{ hms_docker_container_map['prowlarr']['proxy_host_rule'] }}.{{ hms_docker_domain }}/api/v1/config/host/{{ prowlarr_id }}"
+                url: "{{ prowlarr_url }}/v1/config/host/{{ prowlarr_id }}"
                 method: PUT
                 body: "{{ prowlarr_system_conf_updated }}"
                 status_code: 202
@@ -365,12 +370,17 @@
             name: radarr
           register: radarr_container_info
 
+        - name: Set Radarr facts
+          ansible.builtin.set_fact:
+            radarr_url: "http{{ 's' if traefik_ssl_enabled and not hmsdocker_expose_ports_enabled_radarr }}://{{ hms_docker_container_map['radarr']['proxy_host_rule'] }}.{{ hms_docker_domain }}{{ ':7878' if hmsdocker_expose_ports_enabled_radarr }}/api"
+            radarr_download_client_name: "HMSD - Transmission"
+
         - name: Configure General proxy in Radarr
           when: hmsdocker_container_enabled_transmission
           block:
             - name: Get current system proxy status
               ansible.builtin.uri:
-                url: "http{{ 's' if traefik_ssl_enabled }}://{{ hms_docker_container_map['radarr']['proxy_host_rule'] }}.{{ hms_docker_domain }}/api/v3/config/host"
+                url: "{{ radarr_url }}/v3/config/host"
                 method: GET
                 status_code: 200
                 body_format: json
@@ -393,7 +403,7 @@
             - name: Configure Radarr HTTP Proxy
               when: not proxy_enabled
               ansible.builtin.uri:
-                url: "http{{ 's' if traefik_ssl_enabled }}://{{ hms_docker_container_map['radarr']['proxy_host_rule'] }}.{{ hms_docker_domain }}/api/v3/config/host/{{ prowlarr_id }}"
+                url: "{{ radarr_url }}/v3/config/host/{{ prowlarr_id }}"
                 method: PUT
                 body: "{{ radarr_system_conf_updated }}"
                 status_code: 202
@@ -404,9 +414,9 @@
               register: radarr_req_add_system_proxy
               changed_when: radarr_req_add_system_proxy.status == 202
 
-        - name: Get current root folders
+        - name: Get Radarr root folders
           ansible.builtin.uri:
-            url: "http{{ 's' if traefik_ssl_enabled }}://{{ hms_docker_container_map['radarr']['proxy_host_rule'] }}.{{ hms_docker_domain }}/api/v3/rootfolder"
+            url: "{{ radarr_url }}/v3/rootfolder"
             method: GET
             status_code: 200
             body_format: json
@@ -415,7 +425,7 @@
               X-Api-Key: "{{ slurped_api_key_radarr['content'] | b64decode | regex_search(arr_apikey) }}"
           register: radarr_root_folders
 
-        - name: Set current folder variable
+        - name: Set Radarr root folder variables
           ansible.builtin.set_fact:
             radarr_accessible_root_folders: "{{ radarr_root_folders.json | json_query('[?accessible==`true`].path') }}"
             radarr_mount_list: "{{ radarr_container_info.container.Mounts | selectattr('Source', 'equalto', hms_docker_mount_path) | map(attribute='Destination') | list }}"
@@ -423,7 +433,7 @@
 
         - name: Ensure root folder is configured in Radarr
           ansible.builtin.uri:
-            url: "http{{ 's' if traefik_ssl_enabled }}://{{ hms_docker_container_map['radarr']['proxy_host_rule'] }}.{{ hms_docker_domain }}/api/v3/rootfolder"
+            url: "{{ radarr_url }}/v3/rootfolder"
             method: POST
             status_code:
               - 201
@@ -447,7 +457,7 @@
           block:
             - name: Get download clients
               ansible.builtin.uri:
-                url: "http{{ 's' if traefik_ssl_enabled }}://{{ hms_docker_container_map['radarr']['proxy_host_rule'] }}.{{ hms_docker_domain }}/api/v3/downloadclient"
+                url: "{{ radarr_url }}/v3/downloadclient"
                 method: GET
                 status_code: 200
                 body_format: json
@@ -456,15 +466,14 @@
                   X-Api-Key: "{{ slurped_api_key_radarr['content'] | b64decode | regex_search(arr_apikey) }}"
               register: radarr_downloaders
 
-            - name: Set download client Facts
+            - name: Set Radarr download client Facts
               ansible.builtin.set_fact:
-                radarr_download_client_name: "HMSD - Transmission"
                 radarr_download_clients: "{{ radarr_downloaders.json | json_query('[?implementation==`Transmission`].name') }}"
 
             - name: Configure Transmission download client in Radarr
               when: radarr_download_client_name not in radarr_download_clients
               ansible.builtin.uri:
-                url: "http{{ 's' if traefik_ssl_enabled }}://{{ hms_docker_container_map['radarr']['proxy_host_rule'] }}.{{ hms_docker_domain }}/api/v3/downloadclient"
+                url: "{{ radarr_url }}/v3/downloadclient"
                 method: POST
                 body: {
                   name: "{{ radarr_download_client_name }}",
@@ -531,9 +540,14 @@
                 name: radarr-4k
               register: radarr_4k_container_info
 
+            - name: Set Radarr 4K facts
+              ansible.builtin.set_fact:
+                radarr_4k_url: "http{{ 's' if traefik_ssl_enabled and not hmsdocker_expose_ports_enabled_radarr }}://{{ hms_docker_container_map['radarr']['proxy_host_rule'] }}-{{ separate_4k_instances_suffix }}.{{ hms_docker_domain }}{{ ':7879' if hmsdocker_expose_ports_enabled_radarr }}/api"
+                radarr_download_client_name: "HMSD - Transmission"
+
             - name: Precheck Radarr 4K API Key
               ansible.builtin.uri:
-                url: "http{{ 's' if traefik_ssl_enabled }}://{{ hms_docker_container_map['radarr']['proxy_host_rule'] }}-{{ separate_4k_instances_suffix }}.{{ hms_docker_domain }}/api"
+                url: "{{ radarr_4k_url }}"
                 method: GET
                 status_code: 200
                 body_format: json
@@ -547,7 +561,7 @@
               block:
                 - name: Get current system proxy status
                   ansible.builtin.uri:
-                    url: "http{{ 's' if traefik_ssl_enabled }}://{{ hms_docker_container_map['radarr']['proxy_host_rule'] }}-{{ separate_4k_instances_suffix }}.{{ hms_docker_domain }}/api/v3/config/host"
+                    url: "{{ radarr_4k_url }}/v3/config/host"
                     method: GET
                     status_code: 200
                     body_format: json
@@ -570,7 +584,7 @@
                 - name: Configure Radarr 4K HTTP Proxy
                   when: not proxy_enabled
                   ansible.builtin.uri:
-                    url: "http{{ 's' if traefik_ssl_enabled }}://{{ hms_docker_container_map['radarr']['proxy_host_rule'] }}-{{ separate_4k_instances_suffix }}.{{ hms_docker_domain }}/api/v3/config/host/{{ prowlarr_id }}"
+                    url: "{{ radarr_4k_url }}/v3/config/host/{{ prowlarr_id }}"
                     method: PUT
                     body: "{{ radarr_4k_system_conf_updated }}"
                     status_code: 202
@@ -581,9 +595,9 @@
                   register: radarr_4k_req_add_system_proxy
                   changed_when: radarr_4k_req_add_system_proxy.status == 202
 
-            - name: Get current root folders
+            - name: Get Radarr 4K root folders
               ansible.builtin.uri:
-                url: "http{{ 's' if traefik_ssl_enabled }}://{{ hms_docker_container_map['radarr']['proxy_host_rule'] }}-{{ separate_4k_instances_suffix }}.{{ hms_docker_domain }}/api/v3/rootfolder"
+                url: "{{ radarr_4k_url }}/v3/rootfolder"
                 method: GET
                 status_code: 200
                 body_format: json
@@ -592,7 +606,7 @@
                   X-Api-Key: "{{ slurped_api_key_radarr_4k['content'] | b64decode | regex_search(arr_apikey) }}"
               register: radarr_4k_root_folders
 
-            - name: Set current folder variable
+            - name: Set Radarr 4K folder variables
               ansible.builtin.set_fact:
                 radarr_accessible_root_folders: "{{ radarr_4k_root_folders.json | json_query('[?accessible==`true`].path') }}"
                 radarr_4k_mount_list: "{{ radarr_4k_container_info.container.Mounts | selectattr('Source', 'equalto', hms_docker_mount_path) | map(attribute='Destination') | list }}"
@@ -600,7 +614,7 @@
 
             - name: Ensure root folder is configured in Radarr 4K
               ansible.builtin.uri:
-                url: "http{{ 's' if traefik_ssl_enabled }}://{{ hms_docker_container_map['radarr']['proxy_host_rule'] }}-{{ separate_4k_instances_suffix }}.{{ hms_docker_domain }}/api/v3/rootfolder"
+                url: "{{ radarr_4k_url }}/v3/rootfolder"
                 method: POST
                 status_code:
                   - 201
@@ -624,7 +638,7 @@
           block:
             - name: Get download clients
               ansible.builtin.uri:
-                url: "http{{ 's' if traefik_ssl_enabled }}://{{ hms_docker_container_map['radarr']['proxy_host_rule'] }}-{{ separate_4k_instances_suffix }}.{{ hms_docker_domain }}/api/v3/downloadclient"
+                url: "{{ radarr_4k_url }}/v3/downloadclient"
                 method: GET
                 status_code: 200
                 body_format: json
@@ -641,7 +655,7 @@
             - name: Configure Transmission download client in Radarr 4K
               when: radarr_4k_download_client_name not in radarr_4k_download_clients
               ansible.builtin.uri:
-                url: "http{{ 's' if traefik_ssl_enabled }}://{{ hms_docker_container_map['radarr']['proxy_host_rule'] }}-{{ separate_4k_instances_suffix }}.{{ hms_docker_domain }}/api/v3/downloadclient"
+                url: "{{ radarr_4k_url }}/v3/downloadclient"
                 method: POST
                 body: {
                   name: "{{ radarr_4k_download_client_name }}",
@@ -699,7 +713,6 @@
               register: radarr_4k_req_add_download_client
               changed_when: radarr_4k_req_add_download_client.status == 201
 
-            
     - name: Init Sonarr
       when: hmsdocker_container_enabled_radarr
       block:
@@ -708,9 +721,14 @@
             name: sonarr
           register: sonarr_container_info
 
+        - name: Set Sonarr facts
+          ansible.builtin.set_fact:
+            sonarr_url: "http{{ 's' if traefik_ssl_enabled and not hmsdocker_expose_ports_enabled_sonarr }}://{{ hms_docker_container_map['sonarr']['proxy_host_rule'] }}.{{ hms_docker_domain }}{{ ':8989' if hmsdocker_expose_ports_enabled_sonarr }}/api"
+            sonarr_download_client_name: "HMSD - Transmission"
+
         - name: Precheck Sonarr API Key
           ansible.builtin.uri:
-            url: "http{{ 's' if traefik_ssl_enabled }}://{{ hms_docker_container_map['sonarr']['proxy_host_rule'] }}.{{ hms_docker_domain }}/api"
+            url: "{{ sonarr_url }}"
             method: GET
             status_code: 200
             body_format: json
@@ -719,9 +737,9 @@
               X-Api-Key: "{{ slurped_api_key_sonarr['content'] | b64decode | regex_search(arr_apikey) }}"
           register: sonarr_api_key_precheck
 
-        - name: Get current root folders
+        - name: Get Sonarr root folders
           ansible.builtin.uri:
-            url: "http{{ 's' if traefik_ssl_enabled }}://{{ hms_docker_container_map['sonarr']['proxy_host_rule'] }}.{{ hms_docker_domain }}/api/v3/rootfolder"
+            url: "{{ sonarr_url }}/v3/rootfolder"
             method: GET
             status_code: 200
             body_format: json
@@ -730,7 +748,7 @@
               X-Api-Key: "{{ slurped_api_key_sonarr['content'] | b64decode | regex_search(arr_apikey) }}"
           register: sonarr_root_folders
 
-        - name: Set current folder variable
+        - name: Set Sonarr folder variables
           ansible.builtin.set_fact:
             sonarr_accessible_root_folders: "{{ sonarr_root_folders.json | json_query('[?accessible==`true`].path') }}"
             sonarr_mount_list: "{{ sonarr_container_info.container.Mounts | selectattr('Source', 'equalto', hms_docker_mount_path) | map(attribute='Destination') | list }}"
@@ -738,7 +756,7 @@
 
         - name: Ensure root folder is configured in Sonarr
           ansible.builtin.uri:
-            url: "http{{ 's' if traefik_ssl_enabled }}://{{ hms_docker_container_map['sonarr']['proxy_host_rule'] }}.{{ hms_docker_domain }}/api/v3/rootfolder"
+            url: "{{ sonarr_url }}/v3/rootfolder"
             method: POST
             status_code:
               - 201
@@ -762,7 +780,7 @@
           block:
             - name: Get download clients
               ansible.builtin.uri:
-                url: "http{{ 's' if traefik_ssl_enabled }}://{{ hms_docker_container_map['sonarr']['proxy_host_rule'] }}.{{ hms_docker_domain }}/api/v3/downloadclient"
+                url: "{{ sonarr_url }}/v3/downloadclient"
                 method: GET
                 status_code: 200
                 body_format: json
@@ -773,13 +791,12 @@
 
             - name: Set download client Facts
               ansible.builtin.set_fact:
-                sonarr_download_client_name: "HMSD - Transmission"
                 sonarr_download_clients: "{{ sonarr_downloaders.json | json_query('[?implementation==`Transmission`].name') }}"
 
             - name: Configure Transmission download client in Sonarr
               when: sonarr_download_client_name not in sonarr_download_clients
               ansible.builtin.uri:
-                url: "http{{ 's' if traefik_ssl_enabled }}://{{ hms_docker_container_map['sonarr']['proxy_host_rule'] }}.{{ hms_docker_domain }}/api/v3/downloadclient"
+                url: "{{ sonarr_url }}/v3/downloadclient"
                 method: POST
                 body: {
                   name: "{{ sonarr_download_client_name }}",
@@ -845,9 +862,14 @@
                 name: sonarr-4k
               register: sonarr_4k_container_info
 
-            - name: Get current root folders
+            - name: Set Sonarr 4K facts
+              ansible.builtin.set_fact:
+                sonarr_4k_url: "http{{ 's' if traefik_ssl_enabled and not hmsdocker_expose_ports_enabled_sonarr }}://{{ hms_docker_container_map['sonarr']['proxy_host_rule'] }}-{{ separate_4k_instances_suffix }}.{{ hms_docker_domain }}{{ ':8990' if hmsdocker_expose_ports_enabled_sonarr }}/api"
+                sonarr_download_client_name: "HMSD - Transmission"
+
+            - name: Get Sonarr 4K root folders
               ansible.builtin.uri:
-                url: "http{{ 's' if traefik_ssl_enabled }}://{{ hms_docker_container_map['sonarr']['proxy_host_rule'] }}-{{ separate_4k_instances_suffix }}.{{ hms_docker_domain }}/api/v3/rootfolder"
+                url: "{{ sonarr_4k_url }}/v3/rootfolder"
                 method: GET
                 status_code: 200
                 body_format: json
@@ -856,7 +878,7 @@
                   X-Api-Key: "{{ slurped_api_key_sonarr_4k['content'] | b64decode | regex_search(arr_apikey) }}"
               register: sonarr_4k_root_folders
 
-            - name: Set current folder variable
+            - name: Set Sonarr 4K folder variables
               ansible.builtin.set_fact:
                 sonarr_accessible_root_folders: "{{ sonarr_4k_root_folders.json | json_query('[?accessible==`true`].path') }}"
                 sonarr_4k_mount_list: "{{ sonarr_4k_container_info.container.Mounts | selectattr('Source', 'equalto', hms_docker_mount_path) | map(attribute='Destination') | list }}"
@@ -864,7 +886,7 @@
 
             - name: Ensure root folder is configured in Sonarr 4K
               ansible.builtin.uri:
-                url: "http{{ 's' if traefik_ssl_enabled }}://{{ hms_docker_container_map['sonarr']['proxy_host_rule'] }}-{{ separate_4k_instances_suffix }}.{{ hms_docker_domain }}/api/v3/rootfolder"
+                url: "{{ sonarr_4k_url }}/v3/rootfolder"
                 method: POST
                 status_code:
                   - 201
@@ -888,7 +910,7 @@
               block:
                 - name: Get download clients
                   ansible.builtin.uri:
-                    url: "http{{ 's' if traefik_ssl_enabled }}://{{ hms_docker_container_map['sonarr']['proxy_host_rule'] }}-{{ separate_4k_instances_suffix }}.{{ hms_docker_domain }}/api/v3/downloadclient"
+                    url: "{{ sonarr_4k_url }}/v3/downloadclient"
                     method: GET
                     status_code: 200
                     body_format: json
@@ -905,7 +927,7 @@
                 - name: Configure Transmission download client in Sonarr 4K
                   when: sonarr_4k_download_client_name not in sonarr_4k_download_clients
                   ansible.builtin.uri:
-                    url: "http{{ 's' if traefik_ssl_enabled }}://{{ hms_docker_container_map['sonarr']['proxy_host_rule'] }}-{{ separate_4k_instances_suffix }}.{{ hms_docker_domain }}/api/v3/downloadclient"
+                    url: "{{ sonarr_4k_url }}/v3/downloadclient"
                     method: POST
                     body: {
                       name: "{{ sonarr_4k_download_client_name }}",
