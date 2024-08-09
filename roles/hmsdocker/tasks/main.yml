@@ -175,7 +175,6 @@
   when: hmsdocker_init_apps | default(false)
   block:
     - name: Sleep if GitHub Actions runner
-      when: is_github_runner | default(false)
       ansible.builtin.pause:
         minutes: 1
 
