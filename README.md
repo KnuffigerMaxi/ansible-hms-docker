@@ -15,6 +15,7 @@ Ansible Playbook to setup an automated Home Media Server stack running on Docker
 - [Updating](#updating)
 - [Configuration](#configuration)
 - [Content layout](#content-layout)
+- [Automatic App Initialization](./docs/Apps.md/automatic-app-initialization)
 - [Using Cloudflare Tunnel](./docs/Cloudflare.md/#cloudflare-tunnel)
 - [Using Authentik](./docs/Authentik.md)
 - [Adding External Services to Traefik](./docs/Traefik.md/#adding-external-services-to-traefik)

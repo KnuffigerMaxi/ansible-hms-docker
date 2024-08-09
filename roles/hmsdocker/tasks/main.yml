@@ -177,7 +177,7 @@
     - name: Sleep if GitHub Actions runner
       when: is_github_runner | default(false)
       ansible.builtin.pause:
-        minutes: 2
+        minutes: 1
 
     - name: Import API key reader task to retrieve API keys (again)
       ansible.builtin.import_tasks: "app_api_key_reader.yml"
