@@ -4,7 +4,7 @@
   register: public_ip
   ignore_errors: true
 
-- name: Wait for VPN init
+- name: Wait for VPN init (arbitrary 15 second wait)
   ansible.builtin.command: sleep 15
   changed_when: False
 

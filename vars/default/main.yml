@@ -40,5 +40,12 @@ hms_docker_library_folders:
 # The domain used for the Traefik proxy Host rules, SSL certificate (if enabled), and DDNS (if enabled) // default: "home.local"
 hms_docker_domain: home.local
 
+# If the playbook should attempt to connect the following apps together automatically:
+# Prowlarr -> Sonarr, Radarr
+# Transmission -> Sonarr, Radarr, Prowlarr (app proxy only)
+# FlareSolverr -> Prowlarr
+# Also configures the root folder for Sonarr and Radarr
+hmsdocker_init_apps: no
+
 ### End of HMS-Docker settings
 #######################################################################

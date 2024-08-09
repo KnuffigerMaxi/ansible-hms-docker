@@ -11,6 +11,7 @@
   "monitoring_scripts_enabled": true,
   "media_avail_script_enabled": true,
   "hmsdocker_expose_ports_enabled_calibre": false,
+  "hmsdocker_init_apps": yes,
   "hms_docker_container_map": {
     "traefik": {
       "enabled": true,

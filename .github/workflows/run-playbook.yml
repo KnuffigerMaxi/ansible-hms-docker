@@ -56,11 +56,3 @@ jobs:
           hms-docker.yml
           --diff
           --extra-vars "@.github/extra-vars.yml"
-
-      - name: Run App Init
-        run: >-
-          sudo ansible-playbook
-          -i inventory/hosts.yml
-          app_init.yml
-          --diff
-          --extra-vars "@.github/extra-vars.yml"

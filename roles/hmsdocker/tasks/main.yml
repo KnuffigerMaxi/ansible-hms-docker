@@ -170,3 +170,12 @@
     - hmsdocker_container_enabled_transmission
     - not ansible_check_mode
     - not is_github_runner | default(false)
+
+- name: Initialize Supported Apps via their APIs
+  when: hmsdocker_init_apps | default(false)
+  block:
+    - name: Import API key reader task to retrieve API keys (again)
+      ansible.builtin.import_tasks: "app_api_key_reader.yml"
+    
+    - name: Import App Init task
+      ansible.builtin.import_tasks: "app_init.yml"
