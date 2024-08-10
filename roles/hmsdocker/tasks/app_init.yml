@@ -409,8 +409,10 @@
     - name: Set Radarr root folder variables
       ansible.builtin.set_fact:
         radarr_accessible_root_folders: "{{ radarr_root_folders.json | json_query('[?accessible==`true`].path') }}"
-        radarr_mount_list: "{{ radarr_container_info.container.Mounts | selectattr('Source', 'equalto', hms_docker_mount_path) | map(attribute='Destination') | list }}"
-        hmsd_movie_folders: "{{ hms_docker_library_folders | selectattr('type', 'equalto', 'movies') | map(attribute='folder_name') | list }}"
+        radarr_mount_list: "{{ radarr_container_info.container.Mounts | json_query(mount_query) }}"
+        hmsd_movie_folders: "{{ hms_docker_library_folders | json_query('[?type==`movies`].folder_name') }}"
+      vars:
+        mount_query: "[?Source=='{{ hms_docker_mount_path }}'].Destination"
 
     - name: Ensure root folder is configured in Radarr
       ansible.builtin.uri:
